@@ -21,6 +21,7 @@ export const query = graphql`
       version
     }
     sitePage(path: {eq: $parentPath}) {
+      id
       path
       context {
         frontmatter {
@@ -57,6 +58,10 @@ export const query = graphql`
         required
         deprecated
       }
+      passthrough {
+        element
+        url
+      }
       subcomponents {
         name
         props {
@@ -66,6 +71,10 @@ export const query = graphql`
           defaultValue
           required
           deprecated
+        }
+        passthrough {
+          element
+          url
         }
       }
     }
@@ -77,7 +86,7 @@ export const query = graphql`
 `
 
 export default function ReactComponentLayout({data}) {
-  const {name, status, a11yReviewed, importPath, props: componentProps, subcomponents, stories} = data.reactComponent
+  const {name, status, a11yReviewed, importPath, passthrough, props: componentProps, subcomponents, stories} = data.reactComponent
   // This is a temporary and very hacky fix to make sure TooltipV2 has the correct component name in the import path.
   // We will remove this once https://github.com/primer/react/pull/4483 is merged and release.
   let componentName = name
@@ -103,6 +112,16 @@ export default function ReactComponentLayout({data}) {
   // this component has a dedicated page for its deprecated version
   if (data.deprecatedMdx?.id !== undefined) statuses.push("deprecated")
 
+  const baseUrl = (() => {
+    const slugMatch = data.sitePage.id.match(/\/components\/(\w+)\//)
+
+    if (slugMatch) {
+      return `/components/${slugMatch[1]}`
+    }
+
+    return data.sitePage.path;
+  })()
+
   return (
     <BaseLayout title={title} description={description}>
       <Box sx={{maxWidth: 1200, width: '100%', p: [4, 5, 6, 7], mx: 'auto'}}>
@@ -114,7 +133,7 @@ export default function ReactComponentLayout({data}) {
         ) : null}
         <Box sx={{mb: 4}}>
           <ComponentPageNav
-            basePath={data.sitePage.path}
+            basePath={baseUrl}
             includeReact={data.sitePage.context.frontmatter.reactId}
             includeRails={data.sitePage.context.frontmatter.railsIds}
             includeFigma={data.sitePage.context.frontmatter.figmaId}
@@ -192,7 +211,7 @@ export default function ReactComponentLayout({data}) {
                     },
                   }}
                 >
-                  <StatusMenu currentStatus={status} statuses={statuses} parentPath={`${data.sitePage.path}/react`} />
+                  <StatusMenu currentStatus={status} statuses={statuses} parentPath={`${baseUrl}/react`} />
                 </Box>
               }
             </Box>
@@ -252,11 +271,11 @@ export default function ReactComponentLayout({data}) {
 
             <H2>Props</H2>
             <H3>{name}</H3>
-            <ReactPropsTable props={componentProps} />
+            <ReactPropsTable passthrough={passthrough} props={componentProps} />
             {subcomponents?.map(subcomponent => (
               <>
                 <H3>{subcomponent.name}</H3>
-                <ReactPropsTable props={subcomponent.props} />
+                <ReactPropsTable passthrough={subcomponent.passthrough} props={subcomponent.props} />
               </>
             ))}
           </Box>
@@ -276,6 +295,7 @@ function sentenceCase(str: string) {
 // TODO: Make table responsive
 function ReactPropsTable({
   props,
+  passthrough,
 }: {
   props: Array<{
     name: string
@@ -285,12 +305,18 @@ function ReactPropsTable({
     deprecated: boolean
     description: string
   }>
+  passthrough: {
+    url: string
+    element: string
+  }
 }) {
   if (props.length === 0) {
     return (
       <Box sx={{padding: 3, bg: 'canvas.inset', textAlign: 'center', color: 'fg.muted', borderRadius: 2}}>No props</Box>
     )
   }
+
+  const isPolymorphic = props.find(({name}) => name === 'as');
 
   return (
     <Box sx={{overflow: 'auto'}}>
@@ -340,6 +366,21 @@ function ReactPropsTable({
               </td>
             </tr>
           ))}
+          {passthrough && (
+            <tr>
+              <Box as="td" colSpan={3} fontSize={1} verticalAlign="top">
+                Additional props are passed to the <InlineCode>&lt;{passthrough?.element}&gt;</InlineCode> element. See{' '}
+                the <Link href={passthrough.url}>docs for {passthrough?.element}</Link> for a list of props/attributes accepted by the <InlineCode>&lt;{passthrough.element}&gt;</InlineCode>{' '}
+                element.
+                {isPolymorphic && (
+                  <>
+                    {' '}
+                    If an <InlineCode>as</InlineCode> prop is specified, the accepted props will change accordingly.
+                  </>
+                )}
+              </Box>
+            </tr>
+          )}
         </tbody>
       </Table>
     </Box>
